@@ -228,7 +228,24 @@ Debug container: `docker compose -p k5-day14-docker logs agent`, `docker exec -i
 
 ## Part 3: Cloud Deployment
 
-_(chưa làm)_
+Đã deploy agent Part 6 lên Render (Blueprint từ `06-lab-complete/render.yaml`), URL và kết quả kiểm tra ở `DEPLOYMENT.md`. Railway đã thử trước nhưng workspace bị khóa do "Suspicious activity" nên chuyển sang Render.
+
+### Exercise 3.1 / 3.2: Railway và Render
+
+| Mục | `railway.toml` | `render.yaml` |
+|---|---|---|
+| Cách build | `builder = "DOCKERFILE"` | `runtime: docker`, `dockerfilePath` + `dockerContext` |
+| Health check | `healthcheckPath = "/health"` | `healthCheckPath: /health` |
+| Secret | Đặt bằng `railway variables set`, không nằm trong file | `generateValue: true` cho `AGENT_API_KEY`, Render tự sinh |
+| Redis | Phải tạo thủ công trên Railway, rồi đặt `REDIS_URL` | Khai báo trong cùng file (`type: redis`), `REDIS_URL` lấy bằng `fromService` |
+| Gói miễn phí | Không khai báo trong file | `plan: free` phải ghi rõ, nếu không Render mặc định gói trả phí và đòi thẻ |
+| Thư mục chứa app | Đường dẫn mặc định ở gốc repo | Phải chỉ `dockerContext` vì repo chứa agent trong `06-lab-complete/` |
+
+**Khác nhau và vì sao:** `railway.toml` chỉ mô tả build và deploy, còn tài nguyên (Redis, biến môi trường) cấu hình trên dashboard. `render.yaml` là Blueprint khai báo cả web service lẫn Redis trong một file, nên có thể tái tạo toàn bộ hạ tầng từ repo. Lỗi gặp phải: thiếu `plan: free` làm Render đòi thẻ, và thiếu `dockerContext` làm build không tìm thấy Dockerfile.
+
+### Exercise 3.3: Pipeline Cloud Run (`03-cloud-deployment/production-cloud-run/`)
+
+`cloudbuild.yaml` chạy 4 bước khi push lên `main`: (1) test bằng pytest; (2) build Docker image và gắn tag theo commit SHA cùng `latest`; (3) push image lên registry; (4) deploy lên Cloud Run ở `asia-southeast1` với `min-instances=1` (tránh cold start), `max-instances=10`, và lấy `OPENAI_API_KEY` từ Secret Manager. `service.yaml` là định nghĩa IaC của cùng service: bật `containerConcurrency: 80`, `startupProbe` gọi `/ready` và `livenessProbe` gọi `/health`, secret lấy qua `secretKeyRef`. Bài này không deploy lên GCP nên chỉ mô tả từ file.
 
 ## Part 4: API Security
 
@@ -611,27 +628,109 @@ Các quyết định thiết kế chính:
 - **Không chặn event loop**: `/ask` là `def` (chạy trong threadpool).
 - **Dockerfile**: builder tạo venv, runtime `python:3.11-slim` chạy user `app`, `HEALTHCHECK` gọi `/health`, `CMD ["sh","-c","exec uvicorn ... --port ${PORT:-8000} --workers 2"]` để uvicorn là PID 1 và nhận SIGTERM.
 
-Kết quả chạy đầy đủ (`python check_production_ready.py`, chạy trong venv Python 3.12 trên Ubuntu WSL):
+Kết quả chạy đầy đủ (`python check_production_ready.py`, venv Python 3.12 trên Ubuntu WSL):
 
 ```text
+
+🔎 Kiểm tra /root/day14/06-lab-complete
+  ⏳ Kiểm tra tĩnh: file, Dockerfile, compose, config, code...
+  ⏳ Chuẩn bị Redis cho bài test stateless...
+  ⏳ Khởi động agent: uvicorn app.main:app --workers 2 (Redis: container redis:7-alpine tạm thời)
+  ⏳ Restart agent để kiểm tra stateless...
+  ⏳ Kiểm tra readiness khi Redis mất kết nối...
+  ⏳ Kiểm tra cost guard (budget ≈ 0)...
+  ⏳ Kiểm tra graceful shutdown (SIGTERM)...
+  ⏳ Build Docker image prod-check:d2f53254 (Docker 29.9.3) — lần đầu có thể mất vài phút...
+
+================================================================
+  Production Readiness Check — Day 14 Lab
+================================================================
+
 ✅ 1. Dockerfile (multi-stage, < 500 MB)
-     ✅ Docker: build image thành công — 291s
+     ✅ Dockerfile tồn tại
+     ✅ requirements.txt tồn tại
+     ✅ Multi-stage build (≥ 2 lệnh FROM)
+     ✅ Base image gọn (slim / alpine / distroless) — stage cuối dùng python:3.11-slim
+     ✅ Chạy bằng user non-root
+     ✅ Có HEALTHCHECK
+     ✅ Docker: build image thành công — 3s
      ✅ Docker: image < 500 MB — 273 MB
      ✅ Docker: container chạy được, GET /health → 200
-✅ 2. docker-compose.yml (agent + redis)
-✅ 3. .dockerignore
-✅ 4. Health check endpoint (GET /health)   — GET /health → 200 (uvicorn --workers 2)
-✅ 5. Readiness endpoint (GET /ready)       — Redis mất kết nối → /ready 503 (còn /health vẫn 200)
-✅ 6. API Key authentication                — thiếu / sai key → 401, đúng key → 200
-✅ 7. Rate limiting                         — 429 sau 5 request thành công; restart agent vẫn bị 429
-✅ 8. Cost guard                            — 402 ở request thứ 2
-✅ 9. Config từ environment variables
-✅ 10. Structured logging                   — 12 dòng JSON hợp lệ
-✅ 11. Graceful shutdown                    — SIGTERM lúc đang có request → 200, exit code 0; docker stop exit 0 sau 0.6s
-✅ 12. Public URL ready (Railway / Render config)
 
+✅ 2. docker-compose.yml (agent + redis)
+     ✅ docker-compose.yml tồn tại
+     ✅ Có service agent (build từ Dockerfile) + redis — services: agent, redis — đọc bằng docker compose config
+     ✅ Service agent kết nối redis (REDIS_URL + depends_on)
+
+✅ 3. .dockerignore
+     ✅ .dockerignore tồn tại và có nội dung
+     ✅ .dockerignore loại trừ .env (secrets)
+     ✅ .dockerignore loại trừ __pycache__, venv
+
+✅ 4. Health check endpoint (GET /health)
+     ✅ Code có route /health
+     ✅ Khi chạy: GET /health → 200 — uvicorn --workers 2
+
+✅ 5. Readiness endpoint (GET /ready)
+     ✅ Code có route /ready
+     ✅ Khi chạy: GET /ready → 200
+     ✅ Khi chạy: Redis mất kết nối → /ready 503 (còn /health vẫn 200)
+
+✅ 6. API Key authentication
+     ✅ Code đọc header X-API-Key
+     ✅ Khi chạy: thiếu / sai API key → 401
+     ✅ Khi chạy: API key đúng → 200
+
+✅ 7. Rate limiting
+     ✅ Code trả HTTP 429 khi vượt giới hạn
+     ✅ Khi chạy: vượt giới hạn → 429 — 429 sau 5 request thành công (RATE_LIMIT_PER_MINUTE=5)
+     ✅ Khi chạy: state nằm trong Redis — restart agent vẫn bị 429
+
+✅ 8. Cost guard
+     ✅ Code trả HTTP 402 khi hết budget
+     ✅ Khi chạy: hết budget → 402 — 402 ở request thứ 2
+
+✅ 9. Config từ environment variables
+     ✅ app/config.py đọc biến môi trường
+     ✅ .env.example liệt kê đủ biến cấu hình
+     ✅ .env nằm trong .gitignore
+     ✅ Không hard-code secret trong code
+     ✅ Khi chạy: agent dùng AGENT_API_KEY và RATE_LIMIT_PER_MINUTE từ env
+
+✅ 10. Structured logging
+     ✅ Code ghi log dạng JSON
+     ✅ Khi chạy: mọi dòng log của app là JSON hợp lệ — 12 dòng JSON
+
+✅ 11. Graceful shutdown
+     ✅ Code xử lý SIGTERM / lifespan shutdown
+     ✅ Khi chạy: SIGTERM lúc đang có request → request vẫn 200, process tự thoát — exit code 0
+     ✅ Docker: `docker stop` tắt êm (exit code 0, < 10s) — exit code 0, 0.8s
+
+✅ 12. Public URL ready (Railway / Render config)
+     ✅ Có railway.toml hoặc render.yaml (không chỉ toàn comment)
+     ✅ railway.toml: builder + healthcheckPath = "/health"
+     ✅ render.yaml: web service + healthCheckPath /health
+     ✅ render.yaml: secret không ghi thẳng giá trị (generateValue / sync: false)
+     ✅ App lắng nghe theo biến PORT do platform cấp
+
+================================================================
+  📋 Checklist Deliverable
+     ✅ Dockerfile (multi-stage, < 500 MB)
+     ✅ docker-compose.yml (agent + redis)
+     ✅ .dockerignore
+     ✅ Health check endpoint (GET /health)
+     ✅ Readiness endpoint (GET /ready)
+     ✅ API Key authentication
+     ✅ Rate limiting
+     ✅ Cost guard
+     ✅ Config từ environment variables
+     ✅ Structured logging
+     ✅ Graceful shutdown
+     ✅ Public URL ready (Railway / Render config)
+----------------------------------------------------------------
   Result: 12/12 tiêu chí đạt · 43/43 checks passed
   🎉 PASS 12/12 — PRODUCTION READY! Deploy nào!
+================================================================
 ```
 
 Lưu ý: dòng `EXIT=True` trong log là do lệnh wrapper, không phải exit code thật của script. Kết quả PASS được in bởi chính script; mình chưa xác nhận lại exit code bằng một lần chạy riêng.
@@ -651,3 +750,4 @@ _(Deploy lên Railway/Render và `DEPLOYMENT.md` làm ở CP6.)_
 | 5 | Part 5 | Nhờ AI chạy health/ready, graceful shutdown, stack 3 instance và test stateless | Output thật; nhận xét `/ask` chặn event loop, bản production fallback sang RAM | Đối chiếu kết quả `test_stateless.py` và log container. Giả thuyết về timeout khi kill instance chưa kiểm chứng |
 | 6 | Part 6 | Nhờ AI viết `app/` (config, auth, rate limit, cost guard, log JSON), Dockerfile, compose, `render.yaml` | Code và cấu hình; `check_production_ready.py` PASS 12/12 | Chạy static rồi đầy đủ. Sửa `render.yaml`: thêm `plan: free`, `dockerContext`. _(bạn cần tự đọc lại code)_ |
 | 7 | CP6 | Nhờ AI kiểm tra deploy Render và viết `DEPLOYMENT.md` | URL và kết quả 4 lệnh curl | Bạn tự chạy 4 lệnh và chụp ảnh. Đổi `AGENT_API_KEY` vì key đã dán vào chat |
+| 8 | Part 7 | Nhờ AI chạy load test, eval, quality gate, dựng stack Docker, chụp ảnh và viết `BENCHMARK_REPORT.md` | Số liệu CSV/JSON thật, sửa knowledge base 2 câu, sửa Dockerfile thiếu `PYTHONUSERBASE`, trace/alert | Đối chiếu số trong báo cáo với file JSON/CSV. Phát hiện và ghi lại lỗi sai số lần chạy đầu (process cũ giữ cổng). _(bạn cần tự đọc lại báo cáo và giải thích được các con số)_ |
