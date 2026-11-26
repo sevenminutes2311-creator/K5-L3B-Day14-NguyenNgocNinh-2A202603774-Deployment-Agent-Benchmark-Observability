@@ -6,6 +6,7 @@ services:
   - type: web
     name: ai-agent
     runtime: docker
+    plan: free   # bắt buộc ghi rõ, nếu không Render mặc định gói trả phí và đòi thẻ
     # Repo chứa agent ở thư mục 06-lab-complete/ (không phải gốc repo)
     dockerfilePath: ./06-lab-complete/Dockerfile
     dockerContext: ./06-lab-complete
