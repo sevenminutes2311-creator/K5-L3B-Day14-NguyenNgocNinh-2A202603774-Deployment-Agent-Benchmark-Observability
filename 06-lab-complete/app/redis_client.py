@@ -1,15 +1,27 @@
 """
 Kết nối Redis dùng chung cho rate limiter và cost guard.
 
-Yêu cầu:
-  • Đọc REDIS_URL từ config
-  • App vẫn phải KHỞI ĐỘNG ĐƯỢC khi Redis chưa sẵn sàng (đừng ping Redis lúc import)
-  • redis_healthy() dùng cho GET /ready: Redis không kết nối được → False
+  • Client được tạo lúc import nhưng KHÔNG ping → app vẫn khởi động khi Redis chưa sẵn sàng.
+  • redis_healthy() dùng cho GET /ready: không kết nối được → False.
 """
+import redis
 
-r = None  # TODO: tạo client, vd redis.from_url(settings.redis_url, decode_responses=True)
+from app.config import settings
+
+_client = redis.Redis.from_url(
+    settings.redis_url,
+    decode_responses=True,
+    socket_connect_timeout=1,
+    socket_timeout=2,
+)
+
+
+def get_client() -> redis.Redis:
+    return _client
 
 
 def redis_healthy() -> bool:
-    # TODO: ping Redis; lỗi kết nối → False
-    return False
+    try:
+        return bool(_client.ping())
+    except Exception:
+        return False
