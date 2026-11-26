@@ -1,0 +1,22 @@
+
+===== A (alert: AgentHighErrorRate) =====
+FIRING after 71 s (state=firing)
+alerts now: ['AgentHighErrorRate=firing']
+
+===== B (alert: AgentHighLatencyP95) =====
+FIRING after 131 s (state=firing)
+alerts now: ['AgentHighLatencyP95=firing']
+
+===== C (alert: LLMCostBurnRateHigh) =====
+FIRING after 136 s (state=firing)
+alerts now: ['LLMCostBurnRateHigh=firing']
+
+===== E (alert: none) =====
+no alert expected; state after 180s: 
+alerts now: []
+
+===== D (docker pause 1 instance, alert: AgentInstanceDown) =====
+FIRING after 45 s (state=firing)
+alerts now: ['AgentInstanceDown=firing']
+
+EXPERIMENTS DONE

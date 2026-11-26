@@ -1,0 +1,8 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+GET,/health,"gaierror(-2, 'Name or service not known')",1,2026-11-26T13:43:04Z,2026-11-26T13:43:04Z
+POST,/ask,"ConnectionRefusedError(111, 'Connection refused')",12,2026-11-26T13:40:18Z,2026-11-26T13:43:01Z
+GET,/health,HTTPError('502 Server Error: Bad Gateway for url: /health'),49,2026-11-26T13:40:17Z,2026-11-26T13:43:11Z
+POST,/ask,HTTPError('503 Server Error: Service Unavailable for url: /ask'),769,2026-11-26T13:38:42Z,2026-11-26T13:43:40Z
+GET,/health,"ConnectionRefusedError(111, 'Connection refused')",1,2026-11-26T13:40:18Z,2026-11-26T13:40:18Z
+POST,/ask,HTTPError('502 Server Error: Bad Gateway for url: /ask'),547,2026-11-26T13:40:17Z,2026-11-26T13:43:11Z
+POST,/ask,"gaierror(-2, 'Name or service not known')",5,2026-11-26T13:40:22Z,2026-11-26T13:43:04Z
