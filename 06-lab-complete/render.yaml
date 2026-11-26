@@ -6,7 +6,9 @@ services:
   - type: web
     name: ai-agent
     runtime: docker
-    dockerfilePath: ./Dockerfile
+    # Repo chứa agent ở thư mục 06-lab-complete/ (không phải gốc repo)
+    dockerfilePath: ./06-lab-complete/Dockerfile
+    dockerContext: ./06-lab-complete
     healthCheckPath: /health
     envVars:
       - key: ENVIRONMENT
